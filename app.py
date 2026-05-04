@@ -1,46 +1,41 @@
 
-# FULL MT5 + STREAMLIT TRADING DASHBOARD (SMC + FX + JOURNAL + ALERTS)
+# ADVANCED UNIFIED TRADING DASHBOARD (YFINANCE PRO VERSION)
 
 import streamlit as st
 import pandas as pd
 import numpy as np
-import MetaTrader5 as mt5
+import yfinance as yf
+import plotly.graph_objects as go
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 import requests
 import os
 
+st.set_page_config(layout="wide")
+
+# =========================
+# AUTO REFRESH
+# =========================
+st_autorefresh(interval=60000, key="refresh")
+
 # =========================
 # CONFIG
 # =========================
-
-st.set_page_config(layout="wide")
-
-# Auto refresh
-st_autorefresh(interval=60000, key="refresh")
-
 BOT_TOKEN = "8775932132:AAFQUiigqXKQuNHbEF9w86pyj-SJK2-f5Rs"
 CHAT_ID = "8512166732"
 
-SYMBOLS = ["EURUSD", "GBPUSD", "XAUUSD"]
-TIMEFRAME = mt5.TIMEFRAME_M15
+SYMBOLS = {
+    "EURUSD": "EURUSD=X",
+    "GBPUSD": "GBPUSD=X",
+    "XAUUSD": "GC=F",
+    "BTCUSD": "BTC-USD"
+}
 
 DATA_FILE = "journal.csv"
 
 # =========================
-# MT5 CONNECT
-# =========================
-
-def connect():
-    if not mt5.initialize():
-        st.error("MT5 not connected")
-        return False
-    return True
-
-# =========================
 # TELEGRAM
 # =========================
-
 def send_alert(msg):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -51,63 +46,108 @@ def send_alert(msg):
 # =========================
 # DATA
 # =========================
-
-def get_data(symbol, bars=300):
-    rates = mt5.copy_rates_from_pos(symbol, TIMEFRAME, 0, bars)
-    df = pd.DataFrame(rates)
-    df["time"] = pd.to_datetime(df["time"], unit="s")
-    return df
+@st.cache_data(ttl=60)
+def get_data(symbol, interval):
+    return yf.download(symbol, period="10d", interval=interval, progress=False)
 
 # =========================
 # INDICATORS
 # =========================
-
 def add_indicators(df):
-    df["EMA9"] = df["close"].ewm(span=9).mean()
-    df["EMA21"] = df["close"].ewm(span=21).mean()
+    df["EMA20"] = df["Close"].ewm(span=20).mean()
+    df["EMA50"] = df["Close"].ewm(span=50).mean()
+    return df
 
-    delta = df["close"].diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    rs = gain.rolling(14).mean() / loss.rolling(14).mean()
-    df["RSI"] = 100 - (100 / (1 + rs))
+# =========================
+# SMC STRUCTURE
+# =========================
+def add_structure(df):
+    df = df.copy()
+    df["HH"] = df["High"].rolling(5).max()
+    df["LL"] = df["Low"].rolling(5).min()
+
+    df["BOS_Bull"] = df["Close"] > df["HH"].shift(1)
+    df["BOS_Bear"] = df["Close"] < df["LL"].shift(1)
+
+    df["CHOCH_Bull"] = df["BOS_Bull"] & (~df["BOS_Bull"].shift(1).fillna(False))
+    df["CHOCH_Bear"] = df["BOS_Bear"] & (~df["BOS_Bear"].shift(1).fillna(False))
+
+    df["Liquidity_Sweep_H"] = (df["High"] > df["HH"].shift(1)) & (df["Close"] < df["HH"].shift(1))
+    df["Liquidity_Sweep_L"] = (df["Low"] < df["LL"].shift(1)) & (df["Close"] > df["LL"].shift(1))
 
     return df
 
 # =========================
-# FX STRATEGY
+# MULTI TIMEFRAME ANALYSIS
 # =========================
+def analyze(symbol):
+    d1 = add_structure(add_indicators(get_data(symbol, "1d")))
+    h1 = add_structure(add_indicators(get_data(symbol, "1h")))
+    m15 = add_structure(add_indicators(get_data(symbol, "15m")))
 
-def fx_strategy(df):
-    last = df.iloc[-1]
-    if last["EMA9"] > last["EMA21"] and last["RSI"] > 50:
-        return "BUY"
-    elif last["EMA9"] < last["EMA21"] and last["RSI"] < 50:
-        return "SELL"
-    return "NEUTRAL"
+    latest_d1 = d1.iloc[-1]
+    latest_h1 = h1.iloc[-1]
+    latest_m15 = m15.iloc[-1]
+
+    score = 0
+
+    # Bias
+    if latest_d1["Close"] > latest_d1["EMA50"]:
+        bias = "Bullish"
+        score += 1
+    else:
+        bias = "Bearish"
+        score -= 1
+
+    # Structure alignment
+    if latest_h1["BOS_Bull"]:
+        score += 1
+    if latest_h1["BOS_Bear"]:
+        score -= 1
+
+    # Entry trigger
+    if latest_m15["CHOCH_Bull"] or latest_m15["Liquidity_Sweep_L"]:
+        score += 2
+    if latest_m15["CHOCH_Bear"] or latest_m15["Liquidity_Sweep_H"]:
+        score -= 2
+
+    if score >= 2:
+        signal = "BUY"
+    elif score <= -2:
+        signal = "SELL"
+    else:
+        signal = "NEUTRAL"
+
+    confidence = min(abs(score) / 4 * 100, 100)
+
+    return m15, signal, confidence
 
 # =========================
-# SIMPLE SMC (basic version)
+# CHART
 # =========================
+def plot_chart(df, symbol):
+    fig = go.Figure()
 
-def smc_strategy(df):
-    high = df["high"]
-    low = df["low"]
+    fig.add_trace(go.Candlestick(
+        x=df.index,
+        open=df["Open"],
+        high=df["High"],
+        low=df["Low"],
+        close=df["Close"]
+    ))
 
-    if high.iloc[-1] > high.iloc[-5:-1].max():
-        return "BUY"
-    elif low.iloc[-1] < low.iloc[-5:-1].min():
-        return "SELL"
-    return "NEUTRAL"
+    fig.add_trace(go.Scatter(x=df.index, y=df["EMA20"], name="EMA20"))
+    fig.add_trace(go.Scatter(x=df.index, y=df["EMA50"], name="EMA50"))
+
+    return fig
 
 # =========================
 # JOURNAL
 # =========================
-
 def load_journal():
     if os.path.exists(DATA_FILE):
         return pd.read_csv(DATA_FILE)
-    return pd.DataFrame(columns=["Symbol","Signal","Price","Time"])
+    return pd.DataFrame(columns=["Symbol","Signal","Confidence","Price","Time"])
 
 def save_journal(df):
     df.to_csv(DATA_FILE, index=False)
@@ -117,68 +157,40 @@ journal = load_journal()
 # =========================
 # SESSION STATE
 # =========================
-
 if "last_signal" not in st.session_state:
     st.session_state["last_signal"] = {}
-
-if "strategy" not in st.session_state:
-    st.session_state["strategy"] = "FX"
 
 # =========================
 # UI
 # =========================
-
-st.title("🚀 LIVE TRADING DASHBOARD (MT5)")
-
-if not connect():
-    st.stop()
-
-# Strategy toggle
-col1, col2 = st.columns(2)
-
-if col1.button("FX Strategy"):
-    st.session_state["strategy"] = "FX"
-
-if col2.button("SMC Strategy"):
-    st.session_state["strategy"] = "SMC"
-
-st.write("Active Strategy:", st.session_state["strategy"])
-
-# =========================
-# MAIN LOOP
-# =========================
+st.title("🔥 PRO TRADING DASHBOARD (SMC + MTF)")
 
 cols = st.columns(len(SYMBOLS))
 
 table = []
 
-for i, symbol in enumerate(SYMBOLS):
+for i, (name, ticker) in enumerate(SYMBOLS.items()):
 
-    df = get_data(symbol)
-    df = add_indicators(df)
+    df, signal, confidence = analyze(ticker)
 
-    if st.session_state["strategy"] == "FX":
-        signal = fx_strategy(df)
-    else:
-        signal = smc_strategy(df)
-
-    price = df.iloc[-1]["close"]
+    price = df.iloc[-1]["Close"]
 
     with cols[i]:
-        st.metric(symbol, round(price, 5))
+        st.metric(name, round(price, 5))
         st.write(signal)
+        st.progress(int(confidence))
 
-    # Alerts
-    prev = st.session_state["last_signal"].get(symbol)
+    prev = st.session_state["last_signal"].get(name)
 
     if signal in ["BUY","SELL"] and signal != prev:
-        msg = f"{symbol} {signal} @ {price}"
+        msg = f"{name} {signal} ({confidence:.0f}%) @ {price}"
         send_alert(msg)
-        st.session_state["last_signal"][symbol] = signal
+        st.session_state["last_signal"][name] = signal
 
         journal = pd.concat([journal, pd.DataFrame([{
-            "Symbol": symbol,
+            "Symbol": name,
             "Signal": signal,
+            "Confidence": confidence,
             "Price": price,
             "Time": datetime.now()
         }])])
@@ -186,22 +198,31 @@ for i, symbol in enumerate(SYMBOLS):
         save_journal(journal)
 
     table.append({
-        "Symbol": symbol,
+        "Symbol": name,
         "Price": price,
-        "Signal": signal
+        "Signal": signal,
+        "Confidence %": round(confidence,1)
     })
 
 # =========================
 # TABLE
 # =========================
-
 st.subheader("Market Overview")
 st.dataframe(pd.DataFrame(table), use_container_width=True)
 
 # =========================
-# JOURNAL VIEW
+# CHART SECTION
 # =========================
+st.subheader("Chart")
 
+symbol_choice = st.selectbox("Select Symbol", list(SYMBOLS.keys()))
+df_chart, _, _ = analyze(SYMBOLS[symbol_choice])
+
+st.plotly_chart(plot_chart(df_chart.tail(200), symbol_choice), use_container_width=True)
+
+# =========================
+# JOURNAL
+# =========================
 st.subheader("Trade Journal")
 
 if journal.empty:
@@ -209,30 +230,4 @@ if journal.empty:
 else:
     st.dataframe(journal.tail(50), use_container_width=True)
 
-# =========================
-# BACKTEST (simple)
-# =========================
-
-st.subheader("Quick Backtest")
-
-symbol_bt = st.selectbox("Select Symbol", SYMBOLS)
-
-if st.button("Run Backtest"):
-    df = get_data(symbol_bt, 500)
-    df = add_indicators(df)
-
-    results = []
-
-    for i in range(20, len(df)):
-        slice_df = df.iloc[:i]
-
-        if st.session_state["strategy"] == "FX":
-            sig = fx_strategy(slice_df)
-        else:
-            sig = smc_strategy(slice_df)
-
-        results.append(sig)
-
-    st.write("Signals generated:", len([r for r in results if r!="NEUTRAL"]))
-
-st.warning("MT5 must stay open. This is not a full auto trading bot yet.")
+st.warning("Uses Yahoo Finance data. For analysis only.")
