@@ -1,6 +1,6 @@
 # UNIFIED PRO TRADING DASHBOARD - HIGH SPEED LITE VERSION
 # (SMC ONLY | EURUSD & XAUUSD)
-
+from streamlit.runtime.scriptrunner import add_script_run_ctx
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -344,7 +344,14 @@ if st.session_state["page"] == "Dashboard":
 
     with st.spinner("Scanning markets instantly..."):
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            fetched_data = list(executor.map(fetch_pair_data, PAIRS.keys()))
+            futures = []
+            for pair_name in PAIRS.keys():
+                future = executor.submit(fetch_pair_data, pair_name)
+                # Attach the Streamlit context to the background thread
+                add_script_run_ctx(future) 
+                futures.append(future)
+            
+            fetched_data = [f.result() for f in futures]
 
     for i, (name, scan_d, scan_h, scan_m) in enumerate(fetched_data):
         config = PAIRS[name]

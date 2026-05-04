@@ -1,7 +1,8 @@
-streamlit
-yfinance
+streamlit>=1.33.0
 pandas
 numpy
+yfinance
 plotly
 requests
 streamlit-autorefresh
+websockets>=12.0
