@@ -48,7 +48,27 @@ def send_alert(msg):
 # =========================
 @st.cache_data(ttl=60)
 def get_data(symbol, interval):
-    return yf.download(symbol, period="10d", interval=interval, progress=False)
+    df = yf.download(symbol, period="10d", interval=interval, progress=False)
+
+    if df.empty:
+        return df
+
+    # Fix multi-index issue
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
+    # Ensure correct column names
+    df = df.rename(columns={
+        "Open": "Open",
+        "High": "High",
+        "Low": "Low",
+        "Close": "Close",
+        "Adj Close": "Close",
+        "Volume": "Volume"
+    })
+
+    df = df.dropna()
+    return df
 
 # =========================
 # INDICATORS
@@ -63,17 +83,26 @@ def add_indicators(df):
 # =========================
 def add_structure(df):
     df = df.copy()
+
+    if df.empty or len(df) < 10:
+        return df
+
     df["HH"] = df["High"].rolling(5).max()
     df["LL"] = df["Low"].rolling(5).min()
 
-    df["BOS_Bull"] = df["Close"] > df["HH"].shift(1)
-    df["BOS_Bear"] = df["Close"] < df["LL"].shift(1)
+    # Align series properly
+    close = df["Close"]
+    hh_shift = df["HH"].shift(1)
+    ll_shift = df["LL"].shift(1)
+
+    df["BOS_Bull"] = (close > hh_shift).fillna(False)
+    df["BOS_Bear"] = (close < ll_shift).fillna(False)
 
     df["CHOCH_Bull"] = df["BOS_Bull"] & (~df["BOS_Bull"].shift(1).fillna(False))
     df["CHOCH_Bear"] = df["BOS_Bear"] & (~df["BOS_Bear"].shift(1).fillna(False))
 
-    df["Liquidity_Sweep_H"] = (df["High"] > df["HH"].shift(1)) & (df["Close"] < df["HH"].shift(1))
-    df["Liquidity_Sweep_L"] = (df["Low"] < df["LL"].shift(1)) & (df["Close"] > df["LL"].shift(1))
+    df["Liquidity_Sweep_H"] = ((df["High"] > hh_shift) & (close < hh_shift)).fillna(False)
+    df["Liquidity_Sweep_L"] = ((df["Low"] < ll_shift) & (close > ll_shift)).fillna(False)
 
     return df
 
@@ -81,9 +110,16 @@ def add_structure(df):
 # MULTI TIMEFRAME ANALYSIS
 # =========================
 def analyze(symbol):
-    d1 = add_structure(add_indicators(get_data(symbol, "1d")))
-    h1 = add_structure(add_indicators(get_data(symbol, "1h")))
-    m15 = add_structure(add_indicators(get_data(symbol, "15m")))
+    d1 = get_data(symbol, "1d")
+    h1 = get_data(symbol, "1h")
+    m15 = get_data(symbol, "15m")
+
+    if d1.empty or h1.empty or m15.empty:
+        return pd.DataFrame(), "NO DATA", 0
+
+    d1 = add_structure(add_indicators(d1))
+    h1 = add_structure(add_indicators(h1))
+    m15 = add_structure(add_indicators(m15))
 
     latest_d1 = d1.iloc[-1]
     latest_h1 = h1.iloc[-1]
@@ -231,3 +267,4 @@ else:
     st.dataframe(journal.tail(50), use_container_width=True)
 
 st.warning("Uses Yahoo Finance data. For analysis only.")
+st.write(df.tail())
