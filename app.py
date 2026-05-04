@@ -33,16 +33,16 @@ JOURNAL_FILE = DATA_DIR / "unified_trading_journal.csv"
 PAIRS = {
     "EURUSD": {"ticker": "EURUSD=X", "pip": 0.0001, "contract": 100000, "decimals": 5, "default": 1.10000},
     "GBPUSD": {"ticker": "GBPUSD=X", "pip": 0.0001, "contract": 100000, "decimals": 5, "default": 1.27000},
-    "AUDUSD": {"ticker": "AUDUSD=X", "pip": 0.0001, "contract": 100000, "decimals": 5, "default": 0.65000},
+    # "AUDUSD": {"ticker": "AUDUSD=X", "pip": 0.0001, "contract": 100000, "decimals": 5, "default": 0.65000},
     # "NZDUSD": {"ticker": "NZDUSD=X", "pip": 0.0001, "contract": 100000, "decimals": 5, "default": 0.60000},
-    "USDJPY": {"ticker": "JPY=X", "pip": 0.01, "contract": 100000, "decimals": 3, "default": 150.000},
+    # "USDJPY": {"ticker": "JPY=X", "pip": 0.01, "contract": 100000, "decimals": 3, "default": 150.000},
     # "USDCAD": {"ticker": "CAD=X", "pip": 0.0001, "contract": 100000, "decimals": 5, "default": 1.35000},
     # "USDCHF": {"ticker": "CHF=X", "pip": 0.0001, "contract": 100000, "decimals": 5, "default": 0.90000},
     # "EURJPY": {"ticker": "EURJPY=X", "pip": 0.01, "contract": 100000, "decimals": 3, "default": 165.000},
     # "GBPJPY": {"ticker": "GBPJPY=X", "pip": 0.01, "contract": 100000, "decimals": 3, "default": 190.000},
     # "EURAUD": {"ticker": "EURAUD=X", "pip": 0.0001, "contract": 100000, "decimals": 5, "default": 1.65000},
     "XAUUSD": {"ticker": "GC=F", "pip": 0.01, "contract": 100, "decimals": 2, "default": 2350.00},
-    "BTCUSD": {"ticker": "BTC-USD", "pip": 1.0, "contract": 1, "decimals": 2, "default": 78000.00},
+    # "BTCUSD": {"ticker": "BTC-USD", "pip": 1.0, "contract": 1, "decimals": 2, "default": 78000.00},
 }
 
 RR_OPTIONS = {
