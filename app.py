@@ -1,5 +1,7 @@
 
-# ADVANCED UNIFIED TRADING DASHBOARD (YFINANCE PRO VERSION)
+
+
+# PRO TRADING DASHBOARD (STABLE YFINANCE VERSION - MATCHED UI + ADVANCED FEATURES)
 
 import streamlit as st
 import pandas as pd
@@ -12,11 +14,9 @@ import requests
 import os
 
 st.set_page_config(layout="wide")
-
-# =========================
-# AUTO REFRESH
-# =========================
 st_autorefresh(interval=60000, key="refresh")
+
+
 
 # =========================
 # CONFIG
@@ -33,9 +33,6 @@ SYMBOLS = {
 
 DATA_FILE = "journal.csv"
 
-# =========================
-# TELEGRAM
-# =========================
 def send_alert(msg):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -43,9 +40,6 @@ def send_alert(msg):
     except:
         pass
 
-# =========================
-# DATA
-# =========================
 @st.cache_data(ttl=60)
 def get_data(symbol, interval):
     df = yf.download(symbol, period="10d", interval=interval, progress=False)
@@ -53,34 +47,19 @@ def get_data(symbol, interval):
     if df.empty:
         return df
 
-    # Fix multi-index issue
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
 
-    # Ensure correct column names
-    df = df.rename(columns={
-        "Open": "Open",
-        "High": "High",
-        "Low": "Low",
-        "Close": "Close",
-        "Adj Close": "Close",
-        "Volume": "Volume"
-    })
-
+    df = df.rename(columns={"Adj Close": "Close"})
     df = df.dropna()
+
     return df
 
-# =========================
-# INDICATORS
-# =========================
 def add_indicators(df):
     df["EMA20"] = df["Close"].ewm(span=20).mean()
     df["EMA50"] = df["Close"].ewm(span=50).mean()
     return df
 
-# =========================
-# SMC STRUCTURE
-# =========================
 def add_structure(df):
     df = df.copy()
 
@@ -90,7 +69,6 @@ def add_structure(df):
     df["HH"] = df["High"].rolling(5).max()
     df["LL"] = df["Low"].rolling(5).min()
 
-    # Align series properly
     close = df["Close"]
     hh_shift = df["HH"].shift(1)
     ll_shift = df["LL"].shift(1)
@@ -106,9 +84,6 @@ def add_structure(df):
 
     return df
 
-# =========================
-# MULTI TIMEFRAME ANALYSIS
-# =========================
 def analyze(symbol):
     d1 = get_data(symbol, "1d")
     h1 = get_data(symbol, "1h")
@@ -127,21 +102,16 @@ def analyze(symbol):
 
     score = 0
 
-    # Bias
     if latest_d1["Close"] > latest_d1["EMA50"]:
-        bias = "Bullish"
         score += 1
     else:
-        bias = "Bearish"
         score -= 1
 
-    # Structure alignment
     if latest_h1["BOS_Bull"]:
         score += 1
     if latest_h1["BOS_Bear"]:
         score -= 1
 
-    # Entry trigger
     if latest_m15["CHOCH_Bull"] or latest_m15["Liquidity_Sweep_L"]:
         score += 2
     if latest_m15["CHOCH_Bear"] or latest_m15["Liquidity_Sweep_H"]:
@@ -158,10 +128,7 @@ def analyze(symbol):
 
     return m15, signal, confidence
 
-# =========================
-# CHART
-# =========================
-def plot_chart(df, symbol):
+def plot_chart(df):
     fig = go.Figure()
 
     fig.add_trace(go.Candlestick(
@@ -175,11 +142,9 @@ def plot_chart(df, symbol):
     fig.add_trace(go.Scatter(x=df.index, y=df["EMA20"], name="EMA20"))
     fig.add_trace(go.Scatter(x=df.index, y=df["EMA50"], name="EMA50"))
 
+    fig.update_layout(height=500)
     return fig
 
-# =========================
-# JOURNAL
-# =========================
 def load_journal():
     if os.path.exists(DATA_FILE):
         return pd.read_csv(DATA_FILE)
@@ -190,24 +155,20 @@ def save_journal(df):
 
 journal = load_journal()
 
-# =========================
-# SESSION STATE
-# =========================
 if "last_signal" not in st.session_state:
     st.session_state["last_signal"] = {}
 
-# =========================
-# UI
-# =========================
 st.title("🔥 PRO TRADING DASHBOARD (SMC + MTF)")
 
 cols = st.columns(len(SYMBOLS))
-
 table = []
 
 for i, (name, ticker) in enumerate(SYMBOLS.items()):
 
     df, signal, confidence = analyze(ticker)
+
+    if df.empty:
+        continue
 
     price = df.iloc[-1]["Close"]
 
@@ -240,25 +201,16 @@ for i, (name, ticker) in enumerate(SYMBOLS.items()):
         "Confidence %": round(confidence,1)
     })
 
-# =========================
-# TABLE
-# =========================
 st.subheader("Market Overview")
 st.dataframe(pd.DataFrame(table), use_container_width=True)
 
-# =========================
-# CHART SECTION
-# =========================
 st.subheader("Chart")
-
 symbol_choice = st.selectbox("Select Symbol", list(SYMBOLS.keys()))
 df_chart, _, _ = analyze(SYMBOLS[symbol_choice])
 
-st.plotly_chart(plot_chart(df_chart.tail(200), symbol_choice), use_container_width=True)
+if not df_chart.empty:
+    st.plotly_chart(plot_chart(df_chart.tail(200)), use_container_width=True)
 
-# =========================
-# JOURNAL
-# =========================
 st.subheader("Trade Journal")
 
 if journal.empty:
@@ -266,5 +218,4 @@ if journal.empty:
 else:
     st.dataframe(journal.tail(50), use_container_width=True)
 
-st.warning("Uses Yahoo Finance data. For analysis only.")
-st.write(df.tail())
+st.warning("Uses Yahoo Finance data (may be delayed).")
