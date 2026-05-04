@@ -1,5 +1,5 @@
 # UNIFIED PRO TRADING DASHBOARD (ALL FEATURES + TELEGRAM ALERTS)
-
+import concurrent.futures
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -707,13 +707,63 @@ if st.session_state["page"] == "Dashboard":
         cols = st.columns(min(len(PAIRS), 4))
         table = []
         
-        # We will loop over a subset or all pairs to find live signals
-        # Note: loading full data for all 12 pairs is heavy, so we cache it via load_market_data
-        for i, (name, config) in enumerate(PAIRS.items()):
+        recent_start = str(date.today() - pd.Timedelta(days=14))
+
+        # 1. Define a helper function for the thread pool
+        def fetch_pair_data(pair_name):
             try:
-                # Get last 14 days to keep it fast for scanning
-                recent_start = str(date.today() - pd.Timedelta(days=14))
-                scan_d, scan_h, scan_m = load_market_data(name, recent_start)
+                d, h, m = load_market_data(pair_name, recent_start)
+                return pair_name, d, h, m
+            except Exception:
+                return pair_name, pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+        # 2. Fetch all market data concurrently (Limits to 5 workers to avoid Yahoo IP bans)
+        with st.spinner("Scanning markets concurrently..."):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                fetched_data = list(executor.map(fetch_pair_data, PAIRS.keys()))
+
+        # 3. Process the results instantly
+        for i, (name, scan_d, scan_h, scan_m) in enumerate(fetched_data):
+            config = PAIRS[name]
+            
+            if scan_d.empty or scan_h.empty or scan_m.empty: 
+                continue
+
+            try:
+                if strategy == "SMC Market Structure":
+                    _, _, scan_res = build_smc_strategy(scan_d, scan_h, scan_m, rr_ratio, atr_mult, swing_len, strict_mode, session_start, session_end, enforce_session)
+                else:
+                    _, _, scan_res = build_fx15_strategy(scan_d, scan_h, scan_m, rr_ratio, atr_mult, session_start, session_end, enforce_session)
+                
+                scan_valid = scan_res.dropna(subset=["Close"])
+                if scan_valid.empty: continue
+                
+                row = scan_valid.iloc[-1]
+                sig = row.get("Signal", "NEUTRAL")
+                price = row["Close"]
+                
+                col_idx = i % 4
+                with cols[col_idx]:
+                    st.metric(name, f"{price:.{config['decimals']}f}")
+                    if sig == "BUY": st.success("BUY")
+                    elif sig == "SELL": st.error("SELL")
+                    else: st.warning("NEUTRAL")
+
+                # Telegram logic
+                prev = st.session_state["last_alert"].get(name)
+                if sig in ["BUY", "SELL"] and sig != prev:
+                    msg = f"🔥 {strategy} Alert\nSymbol: {name}\nSignal: {sig}\nPrice: {price:.{config['decimals']}f}\nTime: {datetime.now().strftime('%H:%M')}"
+                    send_alert(msg)
+                    st.session_state["last_alert"][name] = sig
+
+                table.append({
+                    "Symbol": name,
+                    "Price": round(price, config["decimals"]),
+                    "Signal": sig,
+                    "Reason": row.get("Reason", "")
+                })
+            except Exception as e:
+                pass
                 
                 if scan_d.empty or scan_h.empty or scan_m.empty: continue
 
