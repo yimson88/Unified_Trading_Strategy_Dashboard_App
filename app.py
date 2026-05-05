@@ -26,7 +26,8 @@ st_autorefresh(interval=60000, key="refresh")
 # =====================================================
 
 BOT_TOKEN = "8775932132:AAFQUiigqXKQuNHbEF9w86pyj-SJK2-f5Rs"
-CHAT_ID = "8512166732"
+CHAT_ID = "@yimsondev"
+# 8512166732
 
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
