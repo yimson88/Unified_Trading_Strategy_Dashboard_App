@@ -277,20 +277,20 @@ if "last_alert" not in st.session_state: st.session_state["last_alert"] = {}
 with st.sidebar:
     st.header("Main Controls")
     market = st.selectbox("Active Analysis Market", list(PAIRS.keys()), index=0)
-    daily_start = st.date_input("Daily data start", value=pd.to_datetime("2020-01-01"))
+    daily_start = st.date_input("Daily data start", value=pd.to_datetime("202501-01"))
 
     st.divider()
     st.subheader("Risk Management")
     account_balance = st.number_input("Account balance", min_value=10.0, value=10000.0, step=100.0)
-    risk_percent = st.selectbox("Risk % per trade", [0.25, 0.5, 1.0, 1.5, 2.0], index=2)
+    risk_percent = st.selectbox("Risk % per trade", [0.25, 0.5, 1.0, 1.5, 2.0], index=1
     rr_label = st.selectbox("Risk Reward", list(RR_OPTIONS.keys()), index=2)
     rr_ratio = RR_OPTIONS[rr_label]
 
     st.divider()
     st.subheader("Strategy Settings")
-    atr_mult = st.selectbox("ATR safety buffer", [0.5, 1.0, 1.5, 2.0], index=1)
-    swing_len = st.selectbox("SMC swing sensitivity", [2, 3, 4, 5], index=1)
-    strict_mode = st.checkbox("SMC strict Daily + 1H alignment", value=True)
+    atr_mult = st.selectbox("ATR safety buffer", [0.5, 1.0, 1.5, 2.0], index=2
+    swing_len = st.selectbox("SMC swing sensitivity", [2, 3, 4, 5], index=0
+    strict_mode = st.checkbox("SMC strict Daily + 1H alignment", value=False
 
     st.divider()
     st.subheader("Cameroon Watch Time")
