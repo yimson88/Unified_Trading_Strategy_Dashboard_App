@@ -283,7 +283,7 @@ with st.sidebar:
     st.subheader("Risk Management")
     account_balance = st.number_input("Account balance", min_value=10.0, value=10000.0, step=100.0)
     risk_percent = st.selectbox("Risk % per trade", [0.25, 0.5, 1.0, 1.5, 2.0], index=1)
-    rr_label = st.selectbox("Risk Reward", list(RR_OPTIONS.keys()), index=2)
+    rr_label = st.selectbox("Risk Reward", list(RR_OPTIONS.keys()), index=4)
     rr_ratio = RR_OPTIONS[rr_label]
 
     st.divider()
