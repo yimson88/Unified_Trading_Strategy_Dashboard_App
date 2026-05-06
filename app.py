@@ -269,8 +269,8 @@ def color_rows(df):
 # APP START & SIDEBAR
 # =====================================================
 
-st.markdown('<div class="main-title">⚡ High-Speed SMC Dashboard</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Streamlined for EURUSD & XAUUSD. Instant Load Times.</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">⚡ SMC Dashboard</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">EURUSD & XAUUSD</div>', unsafe_allow_html=True)
 
 if "page" not in st.session_state: st.session_state["page"] = "Dashboard"
 if "last_alert" not in st.session_state: st.session_state["last_alert"] = {}
