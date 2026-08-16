@@ -262,7 +262,7 @@ def color_rows(df):
         sig = str(row.get("Signal", row.get("Direction", ""))).upper()
         if "BUY" in sig: return [f"background-color: {BUY_BG}; color: #065f46"] * len(row)
         if "SELL" in sig: return [f"background-color: {SELL_BG}; color: #991b1b"] * len(row)
-        return [f"background-color: {NEUTRAL_BG}; color: #9a3412"] * len(row)
+        return [f"background-color: {NEUTRAL_BG}; color: #9a3411"] * len(row)
     return df.style.apply(apply, axis=1)
 
 # =====================================================
